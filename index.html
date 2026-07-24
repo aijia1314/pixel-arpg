@@ -636,202 +636,105 @@ function drawDungeonBackground() {
   }
 }
 
+// ============================================================
+//  程序化像素精灵引擎（Dave Bollinger 镜像算法）
+//  maskRows 字符串数组 → 自动镜像 → 调色板着色
+// ============================================================
+function mirrorMask(ctx, rows, pal, px, py, ps) {
+  var h = rows.length, w = rows[0].length, sx = px - w * ps;
+  for (var r = 0; r < h; r++) {
+    var line = rows[r];
+    for (var c = 0; c < w; c++) {
+      var idx = parseInt(line[c], 16); if (idx === 0) continue;
+      var clr = pal[idx]; if (!clr || clr === 'transparent') continue;
+      ctx.fillStyle = clr;
+      var dx = sx + c * ps, dy = py - Math.floor(h*ps/2) + r * ps;
+      ctx.fillRect(dx, dy, ps, ps);
+      ctx.fillRect(sx + (w*2-1-c) * ps, dy, ps, ps);
+    }
+  }
+}
+function flipMask(ctx, rows, pal, px, py, ps) {
+  var h = rows.length, w = rows[0].length, sx = px - w * ps;
+  for (var r = 0; r < h; r++) {
+    var line = rows[r];
+    for (var c = 0; c < w; c++) {
+      var idx = parseInt(line[c], 16); if (idx === 0) continue;
+      var clr = pal[idx]; if (!clr || clr === 'transparent') continue;
+      ctx.fillStyle = clr;
+      ctx.fillRect(sx + (w + w - 1 - c) * ps, py - Math.floor(h*ps/2) + r * ps, ps, ps);
+    }
+  }
+}
+
+// 调色板
+var PK = ['transparent','#221122','#4488cc','#889999','#eebb88','#ffffff','#cc8844','#aa88cc','#334455'];
+var PKF = ['transparent','#fff','#fff','#fff','#fff','#fff','#fff','#fff','#fff'];
+var PS = [['transparent','#224422','#44bb33','#77ee55','#ffffff','#113311','#226622'],
+          ['transparent','#112244','#3377cc','#5599ee','#ffffff','#111133','#222266'],
+          ['transparent','#442211','#cc7744','#ee9955','#ffffff','#331111','#662222']];
+var PSF = ['transparent','#fff','#fff','#fff','#fff','#fff','#fff'];
+
+// 骑士遮罩 (6×14 → 镜像 12×14)
+var K_IDLE  = ['011110','133331','133331','138831','132231','122221','122221','722227','272272','222222','222222','166661','122221','111111'];
+var K_WALK1 = ['011110','133331','133331','138831','132231','122221','122221','722227','272272','222222','222222','166661','121121','110111'];
+var K_WALK2 = ['011110','133331','133331','138831','132231','122221','122221','722227','272272','222222','222222','166661','112211','101111'];
+var K_BODY = [K_IDLE, K_WALK1, K_WALK2];
+var K_SWORD = ['000010','000610','000610','000610','000610','000610','000610','000610','000610','000610','000610','000110','000000','000000'];
+var K_SHIELD= ['000000','000000','000000','000000','011110','016661','016661','016661','016661','016661','011110','000000','000000','000000'];
+
+// 史莱姆遮罩 (5×8 → 镜像 10×8)
+var S0 = ['01110','12221','23232','22222','22222','22222','12221','01110'];
+var S1 = ['00000','01110','12421','23232','22222','22222','12221','01110'];
+var S2 = ['01110','12221','23232','22222','22222','12421','01110','00000'];
+var S_FRAMES = [S0, S1, S0, S2];
+
 // 骑士（玩家）—— 4 方向 + 走路动画
 function drawKnight(g, x, y, facing, walkFrame, hurtFlash, isDashing) {
-  var a = facing;
-  while (a < 0) a += Math.PI * 2;
+  var a = facing; while (a < 0) a += Math.PI * 2;
   var dir = Math.round(a / (Math.PI / 2)) % 4;
+  var pal = (hurtFlash > 0 && hurtFlash % 0.06 < 0.03) ? PKF : PK;
+  var wf = Math.floor(walkFrame) % 3;
 
-  var flashOn = hurtFlash > 0 && (hurtFlash % 0.06 < 0.03);
-  var dashTint = isDashing;
-  var wf = Math.floor(walkFrame) % 4;
-  if (wf > 2) wf = 4 - wf;
+  g.save(); g.translate(x, y);
+  if (isDashing) { g.fillStyle = 'rgba(140,200,255,0.35)'; g.fillRect(-15, -17, 30, 31); }
 
-  g.save();
-  g.translate(x, y);
-
-  // 冲刺发光
-  if (dashTint) {
-    g.fillStyle = 'rgba(140,200,255,0.4)';
-    g.fillRect(-14, -16, 28, 32);
-  }
-
-  // 身体颜色
-  var armor  = flashOn ? '#fff' : '#4488cc';
-  var helm   = flashOn ? '#fff' : '#8899aa';
-  var sword  = flashOn ? '#fff' : '#ccddee';
-  var shield = flashOn ? '#fff' : '#cc8844';
-  var skin   = flashOn ? '#fff' : '#eecc99';
-  var boot   = flashOn ? '#fff' : '#664433';
-
-  // ---- 根据方向绘制 ----
-  if (dir === 0 || dir === 2) {
-    // 左右朝向
-    var flip = (dir === 2) ? -1 : 1;
-
-    // 腿（走路摆动）
-    var legAnim = Math.sin(wf * Math.PI / 2) * 2;
-    g.fillStyle = boot;
-    g.fillRect(-3 * flip, 3, 5, 5);           // 后腿
-    g.fillRect( 1 * flip + legAnim, 3, 5, 5); // 前腿
-
-    // 身体
-    g.fillStyle = armor;
-    g.fillRect(-5, -4, 10, 12);
-
-    // 铠甲胸板
-    g.fillStyle = '#5599cc';
-    g.fillRect(-3, -2, 6, 6);
-
-    // 头 + 头盔
-    g.fillStyle = helm;
-    g.fillRect(-4, -12, 8, 9);
-    g.fillStyle = '#667788';
-    g.fillRect(-3, -11, 6, 2);  // 头盔护额
-    // 面罩缝隙
-    g.fillStyle = '#334';
-    g.fillRect(-2, -8, 4, 2);
-    // 头盔顶饰
-    g.fillStyle = '#99aabb';
-    g.fillRect(-1, -14, 2, 3);
-
-    // 眼睛
-    if (!flashOn) {
-      g.fillStyle = '#fff';
-      g.fillRect(2 * flip, -10, 2, 2);
-    }
-
-    // 剑（前面）
-    g.fillStyle = sword;
-    g.fillRect(4 * flip, -8, 8, 2);       // 剑身
-    g.fillRect(10 * flip, -9, 2, 4);      // 剑尖
-    g.fillStyle = '#aa8844';
-    g.fillRect(2 * flip, -8, 3, 2);       // 剑格
-
-    // 盾（另一侧，在身体后面）
-    g.fillStyle = shield;
-    g.fillRect(-9 * flip, -5, 5, 7);
-    g.fillStyle = '#aa6622';
-    g.fillRect(-8 * flip, -4, 3, 5);
-    // 盾纹
-    g.fillStyle = '#ddcc44';
-    g.fillRect(-7 * flip, -2, 1, 3);
-
+  if (dir === 1 || dir === 3) {
+    g.save(); if (dir === 3) g.scale(1, -1);
+    mirrorMask(g, K_BODY[wf], pal, 0, 0, 2);
+    g.restore();
   } else {
-    // 上下朝向
-    var fwd = (dir === 3) ? -1 : 1;  // 上或下
-
-    // 腿
-    var legAnim2 = Math.sin(wf * Math.PI / 2) * 2;
-    g.fillStyle = boot;
-    g.fillRect(-5, 3 * fwd + legAnim2, 4, 5);
-    g.fillRect( 1, 3 * fwd - legAnim2, 4, 5);
-
-    // 身体
-    g.fillStyle = armor;
-    g.fillRect(-5, -4 * fwd, 10, 12 * fwd);
-    var bodyY = Math.min(-4 * fwd, 8 * fwd);
-    var bodyH = Math.abs(12 * fwd);
-    g.fillRect(-5, bodyY, 10, bodyH);
-
-    // 铠甲
-    g.fillStyle = '#5599cc';
-    g.fillRect(-3, bodyY + 2 * fwd, 6, 6);
-
-    // 头 + 头盔
-    g.fillStyle = helm;
-    var headY = bodyY - 9 * fwd;
-    g.fillRect(-4, Math.min(headY, headY + 9 * fwd), 8, 9);
-    g.fillStyle = '#667788';
-    g.fillRect(-3, Math.min(headY, headY + 9 * fwd) + 1 * fwd, 6, 2);
-    g.fillStyle = '#334';
-    g.fillRect(-2, Math.min(headY, headY + 9 * fwd) + 4 * fwd, 4, 2);
-
-    // 眼睛
-    if (!flashOn) {
-      g.fillStyle = '#fff';
-      g.fillRect(-4, Math.min(headY, headY + 9 * fwd) + 3 * fwd, 2, 2);
-      g.fillRect( 2, Math.min(headY, headY + 9 * fwd) + 3 * fwd, 2, 2);
-    }
-
-    // 剑和盾在两侧
-    g.fillStyle = sword;
-    g.fillRect(4, bodyY + 3 * fwd, 7, 2);
-    g.fillRect(10, bodyY + 2 * fwd, 2, 4);
-
-    g.fillStyle = shield;
-    g.fillRect(-9, bodyY + 1 * fwd, 5, 7);
-    g.fillStyle = '#aa6622';
-    g.fillRect(-8, bodyY + 2 * fwd, 3, 5);
+    if (dir === 2) g.save(), g.scale(-1, 1);
+    flipMask(g, K_SHIELD, pal, -4, 0, 2);
+    mirrorMask(g, K_BODY[wf], pal, 0, 0, 2);
+    mirrorMask(g, K_SWORD, pal, 0, 0, 2);
+    if (dir === 2) g.restore();
   }
-
   g.restore();
 }
 
-// 史莱姆（敌人）—— 弹跳动画 + 颜色变种
+// 史莱姆（敌人）—— 镜像精灵 + 弹跳 + 颜色变种
 function drawSlime(g, x, y, hpRatio, flashTimer, bounceT, colorVar) {
-  g.save();
-  g.translate(x, y);
+  var pal = (flashTimer > 0 && flashTimer % 0.06 < 0.03) ? PSF : PS[colorVar % 3];
+  var bf = Math.floor(Math.abs(Math.sin(bounceT)) * 3.99) % 4;
 
-  // 弹跳压扁
-  var squash = 1 + Math.sin(bounceT) * 0.15;
-  var stretch = 1 - Math.sin(bounceT) * 0.1;
+  g.save(); g.translate(x, y);
+  g.fillStyle = 'rgba(0,0,0,0.2)'; g.fillRect(-5, 3, 10, 2);  // 阴影
+  mirrorMask(g, S_FRAMES[bf], pal, 0, -1, 2);
 
-  // 受击闪白
-  var flashOn = flashTimer > 0 && (flashTimer % 0.06 < 0.03);
-
-  // 颜色变种
-  var colors = [
-    { body: '#55cc44', dark: '#339922', eye: '#fff', pupil: '#222' },  // 绿
-    { body: '#44aacc', dark: '#226688', eye: '#fff', pupil: '#222' },  // 蓝
-    { body: '#cc8844', dark: '#884422', eye: '#fff', pupil: '#222' },  // 橙
-  ];
-  var c = colors[colorVar % 3];
-  if (flashOn) { c = { body: '#fff', dark: '#ddd', eye: '#f00', pupil: '#f00' }; }
-
-  // 阴影
-  g.fillStyle = 'rgba(0,0,0,0.2)';
-  g.fillRect(-6, 2, 12, 3);
-
-  // 身体（弹跳变形）
-  g.fillStyle = c.body;
-  var bw = Math.round(12 * squash);
-  var bh = Math.round(11 * stretch);
-  var bsy = -7 - Math.round((bh - 11) / 2);
-  g.fillRect(-bw/2, bsy, bw, bh);
-
-  // 高光
-  g.fillStyle = c.dark;
-  g.fillRect(-bw/2 + 2, bsy + bh - 5, bw - 4, 3);
-
-  // 亮斑
-  g.fillStyle = 'rgba(255,255,255,0.3)';
-  g.fillRect(-2, bsy + 2, 4, 3);
-
-  // 眼睛
-  g.fillStyle = c.eye;
-  g.fillRect(-5, bsy + 2, 3, 4);
-  g.fillRect( 2, bsy + 2, 3, 4);
-  g.fillStyle = c.pupil;
-  g.fillRect(-4, bsy + 3, 2, 2);
-  g.fillRect( 3, bsy + 3, 2, 2);
-
-  // 小嘴
-  if (!flashOn && hpRatio > 0.3) {
-    g.fillStyle = '#226622';
-    g.fillRect(-2, bsy + 7, 4, 2);
-  } else if (!flashOn) {
-    // 受伤表情
-    g.fillStyle = '#226622';
-    g.fillRect(-2, bsy + 7, 4, 1);
+  // 面部
+  g.fillStyle = pal[4]; g.fillRect(-4, -5, 2, 3); g.fillRect(2, -5, 2, 3);  // 眼睛
+  g.fillStyle = pal[5]; g.fillRect(-3, -4, 1, 1); g.fillRect(3, -4, 1, 1);  // 瞳孔
+  if (flashTimer <= 0 || !(flashTimer % 0.06 < 0.03)) {
+    g.fillStyle = pal[6];
+    g.fillRect(-2, hpRatio > 0.3 ? 1 : 2, 4, hpRatio > 0.3 ? 2 : 1);
   }
 
   // 血条
-  var barW = 14, barH = 2, barY = bsy - 5;
-  g.fillStyle = '#333';
-  g.fillRect(-barW/2, barY, barW, barH);
+  var bw = 14, by_ = -10;
+  g.fillStyle = '#333'; g.fillRect(-bw/2, by_, bw, 2);
   g.fillStyle = hpRatio > 0.5 ? '#4f4' : hpRatio > 0.25 ? '#fa0' : '#f33';
-  g.fillRect(-barW/2, barY, barW * hpRatio, barH);
+  g.fillRect(-bw/2, by_, bw * hpRatio, 2);
 
   g.restore();
 }
