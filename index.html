@@ -124,7 +124,7 @@ var player = {
   vx: 0, vy: 0,
   facing: 0,
   walkFrame: 0,
-  attackCD: 0, attackTimer: 0,
+  attackCD: 0, attackTimer: 0, attackAnim: 0,
   skillCD: 0,
   isDashing: false, dashTimer: 0, dashDx: 0, dashDy: 0,
   hp: 100,
@@ -468,6 +468,7 @@ function update(dt) {
 
   // 冷却
   if (player.attackCD > 0) player.attackCD -= dt;
+  if (player.attackAnim > 0) player.attackAnim -= dt;
   if (player.skillCD  > 0) player.skillCD  -= dt;
   if (player.invincible > 0) player.invincible -= dt;
   if (player.hurtFlash  > 0) player.hurtFlash  -= dt;
@@ -551,6 +552,7 @@ function update(dt) {
 
     if (attackJustPressed && player.attackCD <= 0 && !player.isDashing) {
       player.attackCD = 0.3; player.attackTimer = 0.15;
+      player.attackAnim = 0.25;  // 0.25s 攻击动画
       performAttack();
     }
     if (skillJustPressed && player.skillCD <= 0 && !player.isDashing) {
@@ -657,71 +659,120 @@ var CHAR_IMAGES = {
 
 function p(g, x, y, w, h, c) { if (c) { g.fillStyle = c; g.fillRect(x, y, w || 1, h || 1); } }
 
-// ---- 火柴人引擎：关节点 + 画线 ----
+// ---- 火柴人引擎（高清晰版） ----
 function line(g, x1, y1, x2, y2, color, width) {
-  g.strokeStyle = color || '#222'; g.lineWidth = width || 2;
-  g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+  g.strokeStyle = color; g.lineWidth = width;
+  g.beginPath(); g.moveTo(x1|0, y1|0); g.lineTo(x2|0, y2|0); g.stroke();
 }
 function dot(g, x, y, r, color) {
-  g.fillStyle = color || '#222'; g.fillRect(x-r, y-r, r*2, r*2);
+  g.fillStyle = color; g.fillRect((x-r)|0, (y-r)|0, r*2, r*2);
 }
 
-// 单帧火柴人关节渲染
-function drawStickFrame(g, joints, color) {
-  var c = color || '#1a1a2e';
-  var lw = 2;
-  // 头
-  dot(g, joints.hx, joints.hy, 3, c);
-  // 身体
-  line(g, joints.bx, joints.by, joints.hx, joints.hy - 2, c, lw);
-  // 手臂
-  line(g, joints.bx, joints.by, joints.lhx, joints.lhy, c, lw);
-  line(g, joints.bx, joints.by, joints.rhx, joints.rhy, c, lw);
-  // 腿
-  line(g, joints.bx, joints.by + 2, joints.lfx, joints.lfy, c, lw);
-  line(g, joints.bx, joints.by + 2, joints.rfx, joints.rfy, c, lw);
-  // 武器（如果有）
-  if (joints.wx1 !== undefined) {
-    line(g, joints.wx0, joints.wy0, joints.wx1, joints.wy1, '#555', 2.5);
+// 攻击弧线轨迹
+function drawAttackArc(g, bx, by, cos, sin, perpX, perpY, progress) {
+  // progress: 0→0.4=蓄力, 0.4→0.7=挥砍, 0.7→1.0=收尾
+  var phase = progress;
+  var arcColor, arcWidth;
+  if (phase < 0.3) { arcColor = 'rgba(200,200,200,0.5)'; arcWidth = 1; }
+  else if (phase < 0.7) { arcColor = 'rgba(255,220,100,0.9)'; arcWidth = 3; }
+  else { arcColor = 'rgba(255,255,200,0.4)'; arcWidth = 1.5; }
+
+  var startAng, sweepAng;
+  if (phase < 0.3) {
+    startAng = Math.atan2(-sin - perpY*0.3, -cos - perpX*0.3); sweepAng = 0.5;
+  } else if (phase < 0.7) {
+    var t = (phase - 0.3) / 0.4;
+    startAng = Math.atan2(-sin - perpY*0.3, -cos - perpX*0.3);
+    sweepAng = 0.5 + t * 1.8;
+  } else {
+    startAng = Math.atan2(-sin - perpY*0.3, -cos - perpX*0.3) + 0.5;
+    sweepAng = 1.3;
   }
+
+  g.strokeStyle = arcColor; g.lineWidth = arcWidth;
+  g.beginPath();
+  var rhx = bx - perpX * 3, rhy = by - 1 - perpY * 3;
+  g.arc(rhx, rhy, 14, startAng, startAng + sweepAng);
+  g.stroke();
 }
 
-// 计算 8 方向关节点（dir: 0=右 → 7=右上，每 45°）
-// state: 'idle' | 'walk' | 'atk'
+// 关节点计算（优化版）
 function getKnightJoints(dir, frame, state) {
-  var ang = dir * Math.PI / 4;      // 方向角
+  var ang = dir * Math.PI / 4;
   var cos = Math.cos(ang), sin = Math.sin(ang);
-  var perpX = -sin, perpY = cos;     // 垂直方向
+  var perpX = -sin, perpY = cos;
 
-  // 身体中心 (0,0)，头在上(-Y)，脚在下(+Y)
-  var hx = cos * 1,  hy = -7 + sin * 1;
-  var bx = 0, by = -1;
+  var bx = 0, by = 0;
+  var hx = bx + cos * 0.5, hy = by - 8 + sin * 0.5;
 
-  // 手臂偏移
-  var walkSwing = 0;
-  if (state === 'walk') walkSwing = Math.sin(frame * Math.PI / 2) * 2;
-  if (state === 'atk')   walkSwing = -4;  // 攻击时手臂前伸
+  // 手臂
+  var armSwing = 0, armSwing2 = 0;
+  if (state === 'walk') {
+    armSwing = Math.sin(frame * Math.PI) * 1.5;
+    armSwing2 = -armSwing;
+  }
+  if (state === 'atk') {
+    // 攻击动画: 0→0.3 蓄力后摆, 0.3→0.7 前挥, 0.7→1.0 收
+    var t = frame; // 0..1
+    if (t < 0.3) { armSwing = -2 - t * 6; armSwing2 = 0; }       // 蓄力后拉
+    else if (t < 0.7) { var ts = (t-0.3)/0.4; armSwing = -4 + ts*10; armSwing2 = ts*4; } // 前挥
+    else { armSwing = 6; armSwing2 = 4; }                         // 收招
+  }
 
-  // 左手
-  var lhx = bx + perpX * 3 + cos * walkSwing * 0.3;
-  var lhy = by - 1 + perpY * 3;
+  // 左手（非持武器手）
+  var lhx = bx + perpX * 4 + cos * armSwing2;
+  var lhy = by - 2 + perpY * 4;
   // 右手（持武器）
-  var rhx = bx - perpX * 3 + cos * walkSwing * 0.3;
-  var rhy = by - 1 - perpY * 3;
+  var rhx = bx - perpX * 4 + cos * armSwing;
+  var rhy = by - 2 - perpY * 4;
 
   // 腿
-  var legSwing = state === 'walk' ? Math.sin(frame * Math.PI / 2) * 3 : 0;
-  var lfx = bx + perpX * 3 + cos * legSwing * 0.5;
-  var lfy = by + 6 + legSwing * 0.3;
-  var rfx = bx - perpX * 3 - cos * legSwing * 0.5;
-  var rfy = by + 6 - legSwing * 0.3;
+  var legPhase = state === 'walk' ? Math.sin(frame * Math.PI) : 0;
+  var legSwing = legPhase * 3.5;
+  var lfx = bx + perpX * 3.5 + cos * legSwing * 0.4;
+  var lfy = by + 7 + Math.abs(legPhase) * 1.5;
+  var rfx = bx - perpX * 3.5 - cos * legSwing * 0.4;
+  var rfy = by + 7 - Math.abs(legPhase) * 1.5;
 
-  // 武器（剑）：右手延伸
+  // 武器
   var wx0 = rhx, wy0 = rhy;
-  var wx1 = rhx + cos * 8 - perpX * 2, wy1 = rhy + sin * 8 - perpY * 2;
+  var wx1 = rhx + cos * 10 - perpX * 1, wy1 = rhy + sin * 10 - perpY * 1;
 
   return { hx:hx, hy:hy, bx:bx, by:by, lhx:lhx, lhy:lhy, rhx:rhx, rhy:rhy,
-           lfx:lfx, lfy:lfy, rfx:rfx, rfy:rfy, wx0:wx0, wy0:wy0, wx1:wx1, wy1:wy1 };
+           lfx:lfx, lfy:lfy, rfx:rfx, rfy:rfy, wx0:wx0, wy0:wy0, wx1:wx1, wy1:wy1,
+           cos:cos, sin:sin, perpX:perpX, perpY:perpY, state:state, frame:frame };
+}
+
+// 渲染一帧
+function drawStickFrame(g, j, color) {
+  var c = color || '#111';
+  var lw = 1.8;
+  var headR = 3.5;
+  // 头（稍大，清晰）
+  g.fillStyle = c;
+  g.beginPath(); g.arc(j.hx|0, j.hy|0, headR, 0, Math.PI*2); g.fill();
+  // 头内高光
+  g.fillStyle = '#fff';
+  g.fillRect((j.hx-1.5)|0, (j.hy-1.5)|0, 1, 1);
+  // 身体
+  line(g, j.bx, j.by, j.hx, j.hy - headR, c, lw);
+  // 手臂
+  line(g, j.bx, j.by, j.lhx, j.lhy, c, lw + 0.3);
+  line(g, j.bx, j.by, j.rhx, j.rhy, c, lw + (j.state==='atk'?1.2:0.3));
+  // 腿
+  line(g, j.bx, j.by + 1, j.lfx, j.lfy, c, lw);
+  line(g, j.bx, j.by + 1, j.rfx, j.rfy, c, lw);
+  // 武器
+  if (j.wx1 !== undefined) {
+    line(g, j.wx0, j.wy0, j.wx1, j.wy1, '#444', 3);
+    // 刀尖高亮
+    g.fillStyle = '#ddd';
+    g.fillRect((j.wx1-1)|0, (j.wy1-1)|0, 3, 3);
+  }
+  // 攻击弧线特效
+  if (j.state === 'atk' && j.frame > 0.2) {
+    drawAttackArc(g, j.bx, j.by, j.cos, j.sin, j.perpX, j.perpY, j.frame);
+  }
 }
 
 // 史莱姆关节（简化：只有一个圆身体 + 眼睛）
@@ -903,10 +954,11 @@ function drawGameWorld() {
 
   // 玩家（骑士）
   g.fillStyle = 'rgba(0,0,0,0.48)'; g.beginPath(); g.ellipse(player.x, player.y+10, 12, 5, 0, 0, Math.PI*2); g.fill();
+  var knightState = player.attackAnim > 0 ? 'atk' : (player.walkFrame > 0 ? 'walk' : 'idle');
+  var knightFrame = player.attackAnim > 0 ? (0.25 - player.attackAnim) / 0.25 : player.walkFrame;
   drawCharacter(g, 'knight', player.x, player.y,
     Math.round(player.facing / (Math.PI / 4)) % 8,
-    player.walkFrame > 0 ? 'walk' : 'idle',
-    player.walkFrame,
+    knightState, knightFrame,
     player.hurtFlash > 0 && (player.hurtFlash % 0.06 < 0.03),
     { isDashing: player.isDashing });
 
