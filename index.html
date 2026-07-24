@@ -641,160 +641,207 @@ function drawDungeonBackground() {
 }
 
 // ============================================================
-//  像素角色（元气骑士级精度 — 逐像素 fillRect 手绘）
-//  骑士 4 方向 + 走路 · 史莱姆弹跳 + 三色 · 骷髅兵 / 蝙蝠
+//  精灵系统 — 数据驱动架构
+//  SPRITE_MODE='stick' → 火柴人 · 'image' → 后期填入PNG素材
+//  CHAR_DEFS 定义每个角色的帧数据，drawCharacter 统一入口
 // ============================================================
+var SPRITE_MODE = 'stick'; // ★ 切换为 'image' 后从 CHAR_IMAGES 读素材
+
+// 角色素材注册表（后期填 PNG / DataURI）
+var CHAR_IMAGES = {
+  knight: null,  // { dirs: [0..7], states: { idle:[img,..], walk:[..], atk:[..] } }
+  slime: null,
+  skeleton: null,
+  bat: null
+};
+
 function p(g, x, y, w, h, c) { if (c) { g.fillStyle = c; g.fillRect(x, y, w || 1, h || 1); } }
 
-// 无头骑士（玩家）—— 8 方向 + 暗黑铠甲 + 大砍刀 + 断颈鬼火
-function drawKnight(g, x, y, facing, walkFrame, hurtFlash, isDashing) {
-  var a = facing; while (a < 0) a += Math.PI * 2;
-  var dir = Math.round(a / (Math.PI / 4)) % 8;  // ★ 8 方向：0=右 1=右下 2=下 3=左下 4=左 5=左上 6=上 7=右上
-  var fl = hurtFlash > 0 && (hurtFlash % 0.06 < 0.03);
-  var wf = Math.floor(walkFrame) % 4; if (wf > 2) wf = 4 - wf;
-  g.save(); g.translate(x, y);
-  if (isDashing) { g.fillStyle = 'rgba(200,80,255,0.35)'; g.fillRect(-18, -19, 36, 36); }
-
-  var A = fl?'#fff':'#1a1a2e', S = fl?'#fff':'#2a2a44', H = fl?'#fff':'#3a3a55';
-  var R = fl?'#fff':'#884455', G = fl?'#fff':'#9922cc', L = fl?'#fff':'#77aaff';
-  var B = fl?'#fff':'#111122', T = fl?'#fff':'#cccccc', D = fl?'#fff':'#888899';
-  var K = fl?'#fff':'#664422', C = fl?'#fff':'#331144', O = fl?'#fff':'#dd8822';
-  var Z = fl?'#fff':'#221133';  // 披风暗面
-
-  // 方向分组：0,1,7=右向 · 2=正下 · 3,4,5=左向 · 6=正上
-  var isSide = (dir !== 2 && dir !== 6);          // 侧视
-  var isLeft = (dir >= 3 && dir <= 5);            // 朝左
-  var isDiag = (dir === 1 || dir === 3 || dir === 5 || dir === 7); // 对角线
-  var isVert = (dir === 2 || dir === 6);          // 正上/正下
-  var isDown = (dir === 1 || dir === 2 || dir === 3);  // 下方分量
-  var isUp   = (dir === 5 || dir === 6 || dir === 7);  // 上方分量
-
-  if (isSide) {
-    var f = isLeft ? -1 : 1;
-    var la = Math.sin(wf * Math.PI / 2) * 3;
-    // 破披风
-    p(g, -7*f, -5, 6, 11, C); p(g, -6*f, -4, 4, 8, Z);
-    // 后腿（对角线时偏移）
-    var rl = isDiag ? (isUp ? -2 : 2) : 0;
-    p(g, -3*f-la, 3+rl, 4, 5, A); p(g, -2*f-la, 5+rl, 3, 2, S);
-    // 身体
-    p(g, -5, -4, 10, 12, A);
-    p(g, -4, -2, 5, 8, S); p(g, 1, -3, 3, 10, H);
-    // 铆钉
-    p(g, -3, -1, 1, 1, O); p(g, -3, 2, 1, 1, O); p(g, -3, 5, 1, 1, O);
-    // 腰带
-    p(g, -5, 6, 10, 2, B); p(g, -3, 6, 6, 1, R);
-    // 肩甲
-    p(g, -7, -3, 8, 5, A); p(g, -6, -2, 6, 3, S); p(g, 0, -3, 5, 4, H);
-    // 断颈
-    p(g, -3, -11, 6, 5, B);
-    p(g, -3, -12, 2, 3, A); p(g, 2, -12, 2, 2, A);
-    p(g, -1, -11, 2, 3, S);
-    // 鬼火（对角线时偏移）
-    var go = isDiag ? 1 : 0;
-    p(g, -2+go*f, -16, 4, 4, G); p(g, -1+go*f, -17, 2, 5, L);
-    p(g, -1+go*f, -15, 2, 1, 'rgba(200,150,255,0.7)');
-    p(g, go*f, -19, 1, 3, 'rgba(180,220,255,0.6)');
-    // 前腿
-    var fl2 = isDiag ? (isDown ? 2 : isUp ? -2 : 0) : 0;
-    p(g, 1*f+la, 3+fl2, 4, 5, A); p(g, 2*f+la, 5+fl2, 3, 3, H);
-    // 大砍刀（对角线时角度微调）
-    var dy = isDiag ? (isDown ? 1 : isUp ? -1 : 0) : 0;
-    p(g, 1*f, -7, 3, 2, K);
-    p(g, 3*f, -9+dy, 8, 3, T);
-    p(g, 10*f, -10+dy, 2, 5, T);
-    p(g, 5*f, -6, 4, 2, D);
-  } else {
-    // 正下(2) 或 正上(6)
-    var fw = (dir === 6) ? -1 : 1;
-    var l2 = Math.sin(wf * Math.PI / 2) * 2;
-    p(g, -5, Math.min(-5*fw, 8*fw), 10, 5, C);
-    p(g, -5, 3*fw+l2, 4, 5, A); p(g, 1, 3*fw-l2, 4, 5, A);
-    var by = Math.min(-4*fw, 8*fw);
-    p(g, -5, by, 10, 12, A); p(g, -3, by+2*fw, 6, 6, S);
-    p(g, -3, by+1*fw, 1, 1, O); p(g, 2, by+1*fw, 1, 1, O);
-    p(g, -7, by, 8, 4, A); p(g, -6, by+1*fw, 6, 2, S);
-    var ny = by - 7*fw, nyt = Math.min(ny, ny+7*fw);
-    p(g, -3, nyt, 6, 5, B); p(g, -2, nyt-1*fw, 2, 2, A);
-    var gy = nyt - 4*fw, gyt = Math.min(gy, gy+4*fw);
-    p(g, -2, gyt, 4, 4, G); p(g, -1, gyt-1*fw, 2, 3, L);
-    p(g, 3, by+2*fw, 7, 3, T); p(g, 9, by+1*fw, 2, 5, T);
-  }
-  g.restore();
+// ---- 火柴人引擎：关节点 + 画线 ----
+function line(g, x1, y1, x2, y2, color, width) {
+  g.strokeStyle = color || '#222'; g.lineWidth = width || 2;
+  g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+}
+function dot(g, x, y, r, color) {
+  g.fillStyle = color || '#222'; g.fillRect(x-r, y-r, r*2, r*2);
 }
 
-// 史莱姆 — 弹跳压扁 + 高光 + 眼瞳 + 嘴
-function drawSlime(g, x, y, hpRatio, flashTimer, bounceT, colorVar) {
-  var sq = 1 + Math.sin(bounceT) * 0.18, tl = 1 - Math.sin(bounceT) * 0.12;
-  var flashOn = flashTimer > 0 && (flashTimer % 0.06 < 0.03);
-  var clr = flashOn ? {b:'#fff',d:'#ddd',h:'#eee',o:'#f00'} :
-    [{b:'#55cc44',d:'#339922',h:'#88ee66',o:'#fff'},
-     {b:'#44aacc',d:'#226688',h:'#77ddee',o:'#fff'},
-     {b:'#cc7744',d:'#884422',h:'#eeaa77',o:'#fff'}][colorVar % 3];
-
-  g.save(); g.translate(x, y);
-  // 地面阴影
-  p(g, -7, 3, 14, 3, 'rgba(0,0,0,0.2)');
-  // 身体主体
-  var bw = Math.round(14*sq), bh = Math.round(13*tl);
-  var by = -8 - Math.round((bh-13)/2);
-  p(g, -bw/2, by, bw, bh, clr.b);
-  // 底部暗色渐变
-  p(g, -bw/2+2, by+bh-5, bw-4, 4, clr.d);
-  // 高光（上半圆光斑）
-  p(g, -bw/2+3, by+2, bw-6, 2, clr.h);
-  p(g, -1, by+1, 3, 3, 'rgba(255,255,255,0.35)');
-  // 眼睛
-  p(g, -6, by+4, 3, 4, flashOn?'#f00':clr.o);
-  p(g, 3, by+4, 3, 4, flashOn?'#f00':clr.o);
-  // 瞳孔
-  p(g, -5, by+5, 2, 2, flashOn?'#f00':'#113311');
-  p(g, 4, by+5, 2, 2, flashOn?'#f00':'#113311');
-  // 嘴
-  if (!flashOn) {
-    p(g, -2, by+bh-3, 4, hpRatio>0.3?2:1, '#226622');
-  }
-  // 血条
-  p(g, -7, by-6, 14, 2, '#333');
-  p(g, -7, by-6, Math.round(14*hpRatio), 2, hpRatio>0.5?'#4f4':hpRatio>0.25?'#fa0':'#f33');
-  g.restore();
-}
-
-// ---- 骷髅兵 ----
-function drawSkeleton(g, x, y, flashTimer, bounceT) {
-  var flashOn = flashTimer > 0 && (flashTimer % 0.06 < 0.03);
-  var bo = flashOn ? '#fff' : '#ddd8c8';
-  g.save(); g.translate(x, y);
-  // 头骨
-  p(g, -4, -10, 8, 7, bo); p(g, -3, -11, 6, 2, bo);
-  // 眼窝
-  p(g, -3, -9, 2, 3, '#222'); p(g, 1, -9, 2, 3, '#222');
-  // 肋骨
-  p(g, -3, -3, 6, 5, bo); p(g, -4, -2, 8, 1, '#ccc8b8');
-  p(g, -4, -1, 8, 1, '#ccc8b8');
-  // 骨盆
-  p(g, -2, 3, 4, 3, bo);
-  // 腿
-  var lb = Math.sin(bounceT||0) * 2;
-  p(g, -3, 5, 2, 5, bo); p(g, 1, 5, 2, 5, bo);
-  p(g, -3+lb, 9, 3, 2, '#999');
-  // 微小手臂
-  p(g, -7, -4, 3, 5, bo); p(g, 4, -4, 3, 5, bo);
-  g.restore();
-}
-
-// ---- 蝙蝠 ----
-function drawBat(g, x, y, bounceT) {
-  var bw = Math.sin(bounceT||0) * 3;
-  g.save(); g.translate(x, y);
+// 单帧火柴人关节渲染
+function drawStickFrame(g, joints, color) {
+  var c = color || '#1a1a2e';
+  var lw = 2;
+  // 头
+  dot(g, joints.hx, joints.hy, 3, c);
   // 身体
-  p(g, -2, -3, 4, 6, '#443355');
-  // 翅膀
-  p(g, -8+bw, -4, 6, 2, '#554466'); p(g, 2-bw, -4, 6, 2, '#554466');
-  p(g, -6+bw, -2, 4, 4, '#665577'); p(g, 2-bw, -2, 4, 4, '#665577');
-  // 眼睛
-  p(g, -1, -2, 2, 2, '#ff4444');
+  line(g, joints.bx, joints.by, joints.hx, joints.hy - 2, c, lw);
+  // 手臂
+  line(g, joints.bx, joints.by, joints.lhx, joints.lhy, c, lw);
+  line(g, joints.bx, joints.by, joints.rhx, joints.rhy, c, lw);
+  // 腿
+  line(g, joints.bx, joints.by + 2, joints.lfx, joints.lfy, c, lw);
+  line(g, joints.bx, joints.by + 2, joints.rfx, joints.rfy, c, lw);
+  // 武器（如果有）
+  if (joints.wx1 !== undefined) {
+    line(g, joints.wx0, joints.wy0, joints.wx1, joints.wy1, '#555', 2.5);
+  }
+}
+
+// 计算 8 方向关节点（dir: 0=右 → 7=右上，每 45°）
+// state: 'idle' | 'walk' | 'atk'
+function getKnightJoints(dir, frame, state) {
+  var ang = dir * Math.PI / 4;      // 方向角
+  var cos = Math.cos(ang), sin = Math.sin(ang);
+  var perpX = -sin, perpY = cos;     // 垂直方向
+
+  // 身体中心 (0,0)，头在上(-Y)，脚在下(+Y)
+  var hx = cos * 1,  hy = -7 + sin * 1;
+  var bx = 0, by = -1;
+
+  // 手臂偏移
+  var walkSwing = 0;
+  if (state === 'walk') walkSwing = Math.sin(frame * Math.PI / 2) * 2;
+  if (state === 'atk')   walkSwing = -4;  // 攻击时手臂前伸
+
+  // 左手
+  var lhx = bx + perpX * 3 + cos * walkSwing * 0.3;
+  var lhy = by - 1 + perpY * 3;
+  // 右手（持武器）
+  var rhx = bx - perpX * 3 + cos * walkSwing * 0.3;
+  var rhy = by - 1 - perpY * 3;
+
+  // 腿
+  var legSwing = state === 'walk' ? Math.sin(frame * Math.PI / 2) * 3 : 0;
+  var lfx = bx + perpX * 3 + cos * legSwing * 0.5;
+  var lfy = by + 6 + legSwing * 0.3;
+  var rfx = bx - perpX * 3 - cos * legSwing * 0.5;
+  var rfy = by + 6 - legSwing * 0.3;
+
+  // 武器（剑）：右手延伸
+  var wx0 = rhx, wy0 = rhy;
+  var wx1 = rhx + cos * 8 - perpX * 2, wy1 = rhy + sin * 8 - perpY * 2;
+
+  return { hx:hx, hy:hy, bx:bx, by:by, lhx:lhx, lhy:lhy, rhx:rhx, rhy:rhy,
+           lfx:lfx, lfy:lfy, rfx:rfx, rfy:rfy, wx0:wx0, wy0:wy0, wx1:wx1, wy1:wy1 };
+}
+
+// 史莱姆关节（简化：只有一个圆身体 + 眼睛）
+function getSlimeJoints(bounceT) {
+  var sq = Math.sin(bounceT) * 2;
+  return {
+    hx:0, hy:-1-sq, bx:0, by:0,
+    lhx:-5, lhy:-2, rhx:5, rhy:-2,  // 眼睛位置
+    lfx:-3, lfy:3+sq, rfx:3, rfy:3+sq
+  };
+}
+
+// ---- 统一绘制入口 ----
+function drawCharacter(g, type, x, y, dir, state, frame, flashOn, extra) {
+  if (SPRITE_MODE === 'image' && CHAR_IMAGES[type]) {
+    // TODO: 后期从 CHAR_IMAGES 读取对应帧的 Image 对象 drawImage
+    // var img = CHAR_IMAGES[type].states[state][frame % ...];
+    // g.drawImage(img, ...);
+    drawStickChar(g, type, x, y, dir, state, frame, flashOn, extra);
+  } else {
+    drawStickChar(g, type, x, y, dir, state, frame, flashOn, extra);
+  }
+}
+
+function drawStickChar(g, type, x, y, dir, state, frame, flashOn, extra) {
+  g.save(); g.translate(x, y);
+  var color = flashOn ? '#fff' : '#222';
+  var ghost = extra && extra.isDashing;
+
+  if (type === 'knight') {
+    if (ghost) { g.fillStyle = 'rgba(200,80,255,0.30)'; g.fillRect(-16, -18, 32, 34); }
+    var j = getKnightJoints(dir, frame, state);
+    drawStickFrame(g, j, color);
+    // 鬼火（断颈上方）
+    if (!flashOn) {
+      p(g, j.hx-2, j.hy-7, 4, 3, 'rgba(180,120,255,0.6)');
+      p(g, j.hx-1, j.hy-8, 2, 2, 'rgba(200,180,255,0.8)');
+    }
+
+  } else if (type === 'slime') {
+    var sj = getSlimeJoints(extra && extra.bounceT || 0);
+    // 身体
+    var sc = flashOn ? '#fff' : (extra && extra.pal ? extra.pal.body : '#55cc44');
+    var sd = flashOn ? '#ddd' : (extra && extra.pal ? extra.pal.dark : '#339922');
+    g.fillStyle = sc;
+    g.fillRect(-6, -4 + (sj.lfy-3)*0.3, 12, 10);
+    g.fillStyle = sd;
+    g.fillRect(-4, 1, 8, 3);
+    // 眼睛
+    g.fillStyle = flashOn ? '#f00' : '#fff';
+    g.fillRect(sj.lhx, sj.lhy - 1, 3, 3);
+    g.fillRect(sj.rhx - 3, sj.rhy - 1, 3, 3);
+    g.fillStyle = flashOn ? '#f00' : '#222';
+    g.fillRect(sj.lhx + 1, sj.lhy, 1, 1);
+    g.fillRect(sj.rhx - 2, sj.rhy, 1, 1);
+    // 血条
+    var hpR = extra && extra.hpRatio || 1;
+    g.fillStyle = '#333'; g.fillRect(-7, -12, 14, 2);
+    g.fillStyle = hpR > 0.5 ? '#4f4' : hpR > 0.25 ? '#fa0' : '#f33';
+    g.fillRect(-7, -12, Math.round(14 * hpR), 2);
+
+  } else if (type === 'skeleton') {
+    var skJ = getKnightJoints(dir || 0, frame || 0, 'idle');
+    drawStickFrame(g, skJ, flashOn ? '#fff' : '#ddd8c8');
+    // 肋骨横线
+    line(g, -3, -2, 3, -2, flashOn ? '#fff' : '#ccc8b8', 1);
+    line(g, -3, 0, 3, 0, flashOn ? '#fff' : '#ccc8b8', 1);
+
+  } else if (type === 'bat') {
+    var bw2 = Math.sin((extra && extra.bounceT) || 0) * 3;
+    g.fillStyle = flashOn ? '#fff' : '#443355';
+    g.fillRect(-2, -2, 4, 5);
+    // 翅膀
+    g.fillStyle = flashOn ? '#fff' : '#554466';
+    g.fillRect(-6 + bw2, -3, 4, 2);
+    g.fillRect(2 - bw2, -3, 4, 2);
+    // 眼
+    g.fillStyle = '#f44'; g.fillRect(-1, -1, 2, 2);
+  }
   g.restore();
+}
+
+// 简笔画背景（替代纯色网格，后期可填入 tile 素材）
+function drawSketchBackground(g) {
+  // 地面基调
+  g.fillStyle = '#f5f0e8'; g.fillRect(0, 0, GW, GH);
+  // 地平线（不规则手绘感）
+  g.strokeStyle = '#c8c0b8';
+  for (var pass = 0; pass < 3; pass++) {
+    g.lineWidth = pass === 0 ? 2 : 1;
+    g.beginPath();
+    var baseY = 200 + pass * 22;
+    g.moveTo(0, baseY + Math.sin(0) * 4);
+    for (var xx = 0; xx < GW; xx += 15) {
+      g.lineTo(xx, baseY + Math.sin(xx * 0.03 + pass) * 4 + Math.sin(xx * 0.07) * 3);
+    }
+    g.stroke();
+  }
+  // 草地纹理短竖线
+  g.strokeStyle = '#b8c8a8';
+  for (var gx = 10; gx < GW; gx += 18) {
+    var gh = 195 + Math.sin(gx * 0.5) * 6;
+    g.beginPath(); g.moveTo(gx, gh); g.lineTo(gx + 2, gh - 4 - Math.random() * 6); g.stroke();
+  }
+  // 远景简笔山
+  g.strokeStyle = '#d0d0d8';
+  g.lineWidth = 1.5;
+  g.beginPath(); g.moveTo(0, 210);
+  for (var mx = 0; mx < GW; mx += 3) {
+    g.lineTo(mx, 205 + Math.sin(mx * 0.015) * 12 + Math.sin(mx * 0.04) * 6);
+  }
+  g.stroke();
+  // 近景石头/灌木（简笔圈）
+  g.strokeStyle = '#bbb';
+  var doodads = [[40,215],[120,208],[280,212],[380,218],[440,210]];
+  for (var di = 0; di < doodads.length; di++) {
+    var dd = doodads[di];
+    g.beginPath(); g.arc(dd[0], dd[1], 5 + (di % 3) * 3, 0, Math.PI * 2); g.stroke();
+    g.beginPath(); g.arc(dd[0] + 2, dd[1] - 2, 2, 0, Math.PI * 2); g.stroke();
+  }
 }
 
 // ============================================================
@@ -802,7 +849,7 @@ function drawBat(g, x, y, bounceT) {
 // ============================================================
 function drawGameWorld() {
   g.clearRect(0, 0, GW, GH);
-  drawDungeonBackground();
+  drawSketchBackground(g);
 
   // 固定副本阵地：地刺和魔晶史莱姆守卫。
   for (var ti = 0; ti < dungeon.traps.length; ti++) {
@@ -848,12 +895,20 @@ function drawGameWorld() {
     var en = enemies[ei];
     if (en.hp <= 0) continue;
     g.fillStyle = 'rgba(0,0,0,0.36)'; g.beginPath(); g.ellipse(en.x, en.y+8, 10, 4, 0, 0, Math.PI*2); g.fill();
-    drawSlime(g, en.x, en.y, en.hp / en.maxHp, en.flashTimer, en.bounceT, en.colorVar);
+    drawCharacter(g, 'slime', en.x, en.y, 0, 'idle', Math.floor(en.bounceT), en.flashTimer > 0 && en.flashTimer % 0.06 < 0.03,
+      { bounceT: en.bounceT, hpRatio: en.hp / en.maxHp,
+        pal: { body: ['#55cc44','#44aacc','#cc7744'][en.colorVar % 3],
+               dark: ['#339922','#226688','#884422'][en.colorVar % 3] } });
   }
 
   // 玩家（骑士）
   g.fillStyle = 'rgba(0,0,0,0.48)'; g.beginPath(); g.ellipse(player.x, player.y+10, 12, 5, 0, 0, Math.PI*2); g.fill();
-  drawKnight(g, player.x, player.y, player.facing, player.walkFrame, player.hurtFlash, player.isDashing);
+  drawCharacter(g, 'knight', player.x, player.y,
+    Math.round(player.facing / (Math.PI / 4)) % 8,
+    player.walkFrame > 0 ? 'walk' : 'idle',
+    player.walkFrame,
+    player.hurtFlash > 0 && (player.hurtFlash % 0.06 < 0.03),
+    { isDashing: player.isDashing });
 
   // 刀光
   if (player.attackTimer > 0) {
