@@ -530,7 +530,8 @@ function update(dt) {
       }
       if (nearest) {
         var fa = angleTo(player, nearest);
-        player.facing = Math.round(fa / (Math.PI / 4)) * (Math.PI / 4);  // 8向
+        player.facing = Math.round(fa / (Math.PI / 4)) * (Math.PI / 4);
+      }
     }
 
     // 冲刺
