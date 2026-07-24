@@ -511,15 +511,16 @@ function update(dt) {
       player.x += player.vx * dt;
       player.y += player.vy * dt;
       if (Math.abs(player.vx) > 3 || Math.abs(player.vy) > 3) {
-        player.facing = Math.atan2(player.vy, player.vx);
-        player.walkFrame += dt * 10;  // 走路动画速度
+        var fa = Math.atan2(player.vy, player.vx);
+        player.facing = Math.round(fa / (Math.PI / 4)) * (Math.PI / 4);  // ★ 8向
+        player.walkFrame += dt * 10;
       } else {
         player.walkFrame = 0;
       }
       player.x = clamp(player.x, player.w/2, GW - player.w/2);
       player.y = clamp(player.y, player.h/2, GH - player.h/2);
 
-      // 自动索敌
+      // 自动索敌（8方向）
       var nearest = null, nearestDist = 75;
       for (var j = 0; j < enemies.length; j++) {
         var en2 = enemies[j];
@@ -527,7 +528,9 @@ function update(dt) {
         var d = dist(player, en2);
         if (d < nearestDist) { nearestDist = d; nearest = en2; }
       }
-      if (nearest) player.facing = angleTo(player, nearest);
+      if (nearest) {
+        var fa = angleTo(player, nearest);
+        player.facing = Math.round(fa / (Math.PI / 4)) * (Math.PI / 4);  // 8向
     }
 
     // 冲刺
@@ -642,83 +645,78 @@ function drawDungeonBackground() {
 // ============================================================
 function p(g, x, y, w, h, c) { if (c) { g.fillStyle = c; g.fillRect(x, y, w || 1, h || 1); } }
 
-// 无头骑士（玩家）—— 暗黑铠甲 + 大砍刀 + 断颈鬼火 + 破披风
+// 无头骑士（玩家）—— 8 方向 + 暗黑铠甲 + 大砍刀 + 断颈鬼火
 function drawKnight(g, x, y, facing, walkFrame, hurtFlash, isDashing) {
   var a = facing; while (a < 0) a += Math.PI * 2;
-  var dir = Math.round(a / (Math.PI / 2)) % 4;
+  var dir = Math.round(a / (Math.PI / 4)) % 8;  // ★ 8 方向：0=右 1=右下 2=下 3=左下 4=左 5=左上 6=上 7=右上
   var fl = hurtFlash > 0 && (hurtFlash % 0.06 < 0.03);
   var wf = Math.floor(walkFrame) % 4; if (wf > 2) wf = 4 - wf;
   g.save(); g.translate(x, y);
   if (isDashing) { g.fillStyle = 'rgba(200,80,255,0.35)'; g.fillRect(-18, -19, 36, 36); }
 
-  var A = fl?'#fff':'#1a1a2e';  // 黑铠
-  var S = fl?'#fff':'#2a2a44';  // 深铠亮面
-  var H = fl?'#fff':'#3a3a55';  // 高光
-  var R = fl?'#fff':'#884455';  // 暗红饰
-  var G = fl?'#fff':'#9922cc';  // 鬼火紫
-  var L = fl?'#fff':'#77aaff';  // 鬼火蓝白
-  var B = fl?'#fff':'#111122';  // 纯黑
-  var T = fl?'#fff':'#cccccc';  // 刀身银
-  var D = fl?'#fff':'#888899';  // 刀暗面
-  var K = fl?'#fff':'#664422';  // 刀柄棕
-  var C = fl?'#fff':'#331144';  // 破披风紫
-  var O = fl?'#fff':'#dd8822';  // 铠甲铆钉
+  var A = fl?'#fff':'#1a1a2e', S = fl?'#fff':'#2a2a44', H = fl?'#fff':'#3a3a55';
+  var R = fl?'#fff':'#884455', G = fl?'#fff':'#9922cc', L = fl?'#fff':'#77aaff';
+  var B = fl?'#fff':'#111122', T = fl?'#fff':'#cccccc', D = fl?'#fff':'#888899';
+  var K = fl?'#fff':'#664422', C = fl?'#fff':'#331144', O = fl?'#fff':'#dd8822';
+  var Z = fl?'#fff':'#221133';  // 披风暗面
 
-  if (dir === 0 || dir === 2) {
-    var f = (dir === 2) ? -1 : 1;
+  // 方向分组：0,1,7=右向 · 2=正下 · 3,4,5=左向 · 6=正上
+  var isSide = (dir !== 2 && dir !== 6);          // 侧视
+  var isLeft = (dir >= 3 && dir <= 5);            // 朝左
+  var isDiag = (dir === 1 || dir === 3 || dir === 5 || dir === 7); // 对角线
+  var isVert = (dir === 2 || dir === 6);          // 正上/正下
+  var isDown = (dir === 1 || dir === 2 || dir === 3);  // 下方分量
+  var isUp   = (dir === 5 || dir === 6 || dir === 7);  // 上方分量
+
+  if (isSide) {
+    var f = isLeft ? -1 : 1;
     var la = Math.sin(wf * Math.PI / 2) * 3;
     // 破披风
-    p(g, -7*f, -5, 6, 11, C); p(g, -7*f, -4, 5, 2, C); p(g, -6*f, 3, 4, 4, C);
-    // 后腿
-    p(g, -3*f-la, 3, 4, 5, A); p(g, -2*f-la, 5, 3, 2, S);
-    // 身体铠甲
+    p(g, -7*f, -5, 6, 11, C); p(g, -6*f, -4, 4, 8, Z);
+    // 后腿（对角线时偏移）
+    var rl = isDiag ? (isUp ? -2 : 2) : 0;
+    p(g, -3*f-la, 3+rl, 4, 5, A); p(g, -2*f-la, 5+rl, 3, 2, S);
+    // 身体
     p(g, -5, -4, 10, 12, A);
-    // 胸甲亮面
     p(g, -4, -2, 5, 8, S); p(g, 1, -3, 3, 10, H);
-    // 胸甲铆钉
+    // 铆钉
     p(g, -3, -1, 1, 1, O); p(g, -3, 2, 1, 1, O); p(g, -3, 5, 1, 1, O);
     // 腰带
     p(g, -5, 6, 10, 2, B); p(g, -3, 6, 6, 1, R);
-    // 肩甲（大块）
-    p(g, -7, -3, 8, 5, A); p(g, -6, -2, 6, 3, S);
-    p(g, 0, -3, 5, 4, H);
-    // 断颈 — 参差不齐的切口
+    // 肩甲
+    p(g, -7, -3, 8, 5, A); p(g, -6, -2, 6, 3, S); p(g, 0, -3, 5, 4, H);
+    // 断颈
     p(g, -3, -11, 6, 5, B);
-    p(g, -3, -12, 2, 3, A); p(g, 2, -12, 2, 2, A);  // 锯齿
-    // 断颈骨茬
+    p(g, -3, -12, 2, 3, A); p(g, 2, -12, 2, 2, A);
     p(g, -1, -11, 2, 3, S);
-    // 鬼火（断颈上方飘动）
-    p(g, -2, -16, 4, 4, G); p(g, -1, -17, 2, 5, L);
-    p(g, -1, -15, 2, 1, 'rgba(200,150,255,0.7)');
-    p(g, 0, -19, 1, 3, 'rgba(180,220,255,0.6)');
+    // 鬼火（对角线时偏移）
+    var go = isDiag ? 1 : 0;
+    p(g, -2+go*f, -16, 4, 4, G); p(g, -1+go*f, -17, 2, 5, L);
+    p(g, -1+go*f, -15, 2, 1, 'rgba(200,150,255,0.7)');
+    p(g, go*f, -19, 1, 3, 'rgba(180,220,255,0.6)');
     // 前腿
-    p(g, 1*f+la, 3, 4, 5, A); p(g, 2*f+la, 5, 3, 3, H);
-    // 大砍刀 — 双手持握
-    p(g, 1*f, -7, 3, 2, K);    // 刀柄
-    p(g, 3*f, -9, 8, 3, T);    // 刀身宽刃
-    p(g, 10*f, -10, 2, 5, T);  // 刀尖
-    p(g, 5*f, -6, 4, 2, D);    // 刀背阴影
+    var fl2 = isDiag ? (isDown ? 2 : isUp ? -2 : 0) : 0;
+    p(g, 1*f+la, 3+fl2, 4, 5, A); p(g, 2*f+la, 5+fl2, 3, 3, H);
+    // 大砍刀（对角线时角度微调）
+    var dy = isDiag ? (isDown ? 1 : isUp ? -1 : 0) : 0;
+    p(g, 1*f, -7, 3, 2, K);
+    p(g, 3*f, -9+dy, 8, 3, T);
+    p(g, 10*f, -10+dy, 2, 5, T);
+    p(g, 5*f, -6, 4, 2, D);
   } else {
-    var fw = (dir === 3) ? -1 : 1;
+    // 正下(2) 或 正上(6)
+    var fw = (dir === 6) ? -1 : 1;
     var l2 = Math.sin(wf * Math.PI / 2) * 2;
-    // 披风
     p(g, -5, Math.min(-5*fw, 8*fw), 10, 5, C);
-    // 腿
     p(g, -5, 3*fw+l2, 4, 5, A); p(g, 1, 3*fw-l2, 4, 5, A);
-    // 身体
     var by = Math.min(-4*fw, 8*fw);
     p(g, -5, by, 10, 12, A); p(g, -3, by+2*fw, 6, 6, S);
-    // 铆钉
     p(g, -3, by+1*fw, 1, 1, O); p(g, 2, by+1*fw, 1, 1, O);
-    // 肩甲
     p(g, -7, by, 8, 4, A); p(g, -6, by+1*fw, 6, 2, S);
-    // 断颈
     var ny = by - 7*fw, nyt = Math.min(ny, ny+7*fw);
     p(g, -3, nyt, 6, 5, B); p(g, -2, nyt-1*fw, 2, 2, A);
-    // 鬼火
     var gy = nyt - 4*fw, gyt = Math.min(gy, gy+4*fw);
     p(g, -2, gyt, 4, 4, G); p(g, -1, gyt-1*fw, 2, 3, L);
-    // 刀
     p(g, 3, by+2*fw, 7, 3, T); p(g, 9, by+1*fw, 2, 5, T);
   }
   g.restore();
