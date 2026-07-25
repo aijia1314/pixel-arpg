@@ -55,9 +55,10 @@
 //  代码手绘像素角色 + 浮动摇杆 + Lerp平滑 + 横屏全屏 + 街霸级打击感
 // ============================================================
 
-// ---------- 固定内部分辨率（像素风） ----------
-var GW = 480;
-var GH = 270;
+// ---------- 内部分辨率 1920×1080（4x 像素风） ----------
+var GW = 1920;
+var GH = 1080;
+var RES = 4;  // 全局缩放因子（基于原始 480×270）
 
 // ---------- DOM ----------
 var canvas = document.getElementById('game');
@@ -119,8 +120,8 @@ canvas.addEventListener('touchstart', tryLockLandscape, { once: true });
 // ============================================================
 var player = {
   x: GW/2, y: GH/2,
-  w: 18, h: 22,
-  speed: 100,
+  w: 72, h: 88,
+  speed: 400,
   vx: 0, vy: 0,
   facing: 0,
   walkFrame: 0,
@@ -195,20 +196,20 @@ function recalcUI() {
 // ============================================================
 function spawnEnemy() {
   var ex, ey;
-  var m = 30;
+  var m = 120;
   var s = Math.floor(Math.random() * 4);
   if      (s === 0) { ex = m;            ey = Math.random() * GH; }
   else if (s === 1) { ex = GW - m;       ey = Math.random() * GH; }
   else if (s === 2) { ex = Math.random() * GW; ey = m; }
   else              { ex = Math.random() * GW; ey = GH - m; }
-  if (Math.hypot(ex - player.x, ey - player.y) < 60) {
+  if (Math.hypot(ex - player.x, ey - player.y) < 240) {
     ex = clamp((ex + GW/2) % GW, m, GW - m);
     ey = clamp((ey + GH/2) % GH, m, GH - m);
   }
   return {
-    x: ex, y: ey, w: 16, h: 16,
+    x: ex, y: ey, w: 64, h: 64,
     hp: 50, maxHp: 50,
-    speed: 40 + Math.random() * 25,
+    speed: 160 + Math.random() * 100,
     stun: 0, hitstop: 0, flashTimer: 0,
     knockbackVx: 0, knockbackVy: 0,
     bounceT: Math.random() * Math.PI * 2,
@@ -362,7 +363,7 @@ function applyDamage(enemy, damage, attackAngle) {
   enemy.flashTimer = 0.1;
   enemy.stun = 0.2;
   enemy.hitstop = 0.08;
-  var f = 180;
+  var f = 720;
   enemy.knockbackVx = Math.cos(attackAngle) * f;
   enemy.knockbackVy = Math.sin(attackAngle) * f;
   player.hitstop = 0.08;
@@ -412,7 +413,7 @@ function updateDungeonDefense(dt) {
 
 function performAttack() {
   var arcAngle = Math.PI * 2 / 3;
-  var range = 38;
+  var range = 152;
   for (var i = 0; i < enemies.length; i++) {
     var en = enemies[i];
     if (en.hp <= 0 || en.hitstop > 0) continue;
@@ -500,7 +501,7 @@ function update(dt) {
       var t = 1 - Math.exp(-40 * dt);
 
       // 首次输入瞬间：直接跳到最低速度，消除"起步迟钝"
-      var wasStopped = (Math.abs(player.vx) < 1 && Math.abs(player.vy) < 1);
+      var wasStopped = (Math.abs(player.vx) < 4 && Math.abs(player.vy) < 1);
       if (wasStopped && (targetVx !== 0 || targetVy !== 0)) {
         player.vx = targetVx * 0.3;
         player.vy = targetVy * 0.3;
@@ -511,7 +512,7 @@ function update(dt) {
 
       player.x += player.vx * dt;
       player.y += player.vy * dt;
-      if (Math.abs(player.vx) > 3 || Math.abs(player.vy) > 3) {
+      if (Math.abs(player.vx) > 12 || Math.abs(player.vy) > 3) {
         var fa = Math.atan2(player.vy, player.vx);
         player.facing = Math.round(fa / (Math.PI / 4)) * (Math.PI / 4);  // ★ 8向
         player.walkFrame += dt * 10;
@@ -522,7 +523,7 @@ function update(dt) {
       player.y = clamp(player.y, player.h/2, GH - player.h/2);
 
       // 自动索敌（8方向）
-      var nearest = null, nearestDist = 75;
+      var nearest = null, nearestDist = 300;
       for (var j = 0; j < enemies.length; j++) {
         var en2 = enemies[j];
         if (en2.hp <= 0) continue;
@@ -545,7 +546,7 @@ function update(dt) {
       for (var k = 0; k < enemies.length; k++) {
         var en3 = enemies[k];
         if (en3.hp <= 0 || en3.hitstop > 0) continue;
-        if (dist(player, en3) < 38) applyDamage(en3, 35, player.facing);
+        if (dist(player, en3) < 152) applyDamage(en3, 35, player.facing);
       }
       if (player.dashTimer <= 0) { player.isDashing = false; }
     }
@@ -577,8 +578,8 @@ function update(dt) {
       if (en.stun <= 0) {
         en.knockbackVx *= Math.pow(0.005, dt);
         en.knockbackVy *= Math.pow(0.005, dt);
-        if (Math.abs(en.knockbackVx) < 3) en.knockbackVx = 0;
-        if (Math.abs(en.knockbackVy) < 3) en.knockbackVy = 0;
+        if (Math.abs(en.knockbackVx) < 12) en.knockbackVx = 0;
+        if (Math.abs(en.knockbackVy) < 12) en.knockbackVy = 0;
       }
     }
     if (en.stun > 0) {
@@ -599,8 +600,8 @@ function update(dt) {
       player.invincible = 0.4;
       player.hurtFlash = 0.15;
       var pa = angleTo(en, player);
-      player.x += Math.cos(pa) * 10;
-      player.y += Math.sin(pa) * 10;
+      player.x += Math.cos(pa) * 40;
+      player.y += Math.sin(pa) * 40;
     }
   }
 
@@ -659,7 +660,7 @@ var CHAR_IMAGES = {
 
 function p(g, x, y, w, h, c) { if (c) { g.fillStyle = c; g.fillRect(x, y, w || 1, h || 1); } }
 
-// ---- 火柴人引擎（高清晰版） ----
+// ---- 火柴人引擎（1920×1080 4x 高清版） ----
 function line(g, x1, y1, x2, y2, color, width) {
   g.strokeStyle = color; g.lineWidth = width;
   g.beginPath(); g.moveTo(x1|0, y1|0); g.lineTo(x2|0, y2|0); g.stroke();
@@ -668,14 +669,12 @@ function dot(g, x, y, r, color) {
   g.fillStyle = color; g.fillRect((x-r)|0, (y-r)|0, r*2, r*2);
 }
 
-// 攻击弧线轨迹
 function drawAttackArc(g, bx, by, cos, sin, perpX, perpY, progress) {
-  // progress: 0→0.4=蓄力, 0.4→0.7=挥砍, 0.7→1.0=收尾
   var phase = progress;
   var arcColor, arcWidth;
-  if (phase < 0.3) { arcColor = 'rgba(200,200,200,0.5)'; arcWidth = 1; }
-  else if (phase < 0.7) { arcColor = 'rgba(255,220,100,0.9)'; arcWidth = 3; }
-  else { arcColor = 'rgba(255,255,200,0.4)'; arcWidth = 1.5; }
+  if (phase < 0.3) { arcColor = 'rgba(200,200,200,0.5)'; arcWidth = 4; }
+  else if (phase < 0.7) { arcColor = 'rgba(255,220,100,0.9)'; arcWidth = 10; }
+  else { arcColor = 'rgba(255,255,200,0.4)'; arcWidth = 5; }
 
   var startAng, sweepAng;
   if (phase < 0.3) {
@@ -688,88 +687,71 @@ function drawAttackArc(g, bx, by, cos, sin, perpX, perpY, progress) {
     startAng = Math.atan2(-sin - perpY*0.3, -cos - perpX*0.3) + 0.5;
     sweepAng = 1.3;
   }
-
   g.strokeStyle = arcColor; g.lineWidth = arcWidth;
   g.beginPath();
-  var rhx = bx - perpX * 3, rhy = by - 1 - perpY * 3;
-  g.arc(rhx, rhy, 14, startAng, startAng + sweepAng);
+  var rhx = bx - perpX * 12, rhy = by - 4 - perpY * 12;
+  g.arc(rhx, rhy, 56, startAng, startAng + sweepAng);
   g.stroke();
 }
 
-// 关节点计算（优化版）
 function getKnightJoints(dir, frame, state) {
   var ang = dir * Math.PI / 4;
   var cos = Math.cos(ang), sin = Math.sin(ang);
   var perpX = -sin, perpY = cos;
 
   var bx = 0, by = 0;
-  var hx = bx + cos * 0.5, hy = by - 8 + sin * 0.5;
+  var hx = bx + cos * 2, hy = by - 32 + sin * 2;
 
-  // 手臂
   var armSwing = 0, armSwing2 = 0;
   if (state === 'walk') {
-    armSwing = Math.sin(frame * Math.PI) * 1.5;
+    armSwing = Math.sin(frame * Math.PI) * 6;
     armSwing2 = -armSwing;
   }
   if (state === 'atk') {
-    // 攻击动画: 0→0.3 蓄力后摆, 0.3→0.7 前挥, 0.7→1.0 收
-    var t = frame; // 0..1
-    if (t < 0.3) { armSwing = -2 - t * 6; armSwing2 = 0; }       // 蓄力后拉
-    else if (t < 0.7) { var ts = (t-0.3)/0.4; armSwing = -4 + ts*10; armSwing2 = ts*4; } // 前挥
-    else { armSwing = 6; armSwing2 = 4; }                         // 收招
+    var t = frame;
+    if (t < 0.3) { armSwing = -8 - t * 24; armSwing2 = 0; }
+    else if (t < 0.7) { var ts = (t-0.3)/0.4; armSwing = -16 + ts*40; armSwing2 = ts*16; }
+    else { armSwing = 24; armSwing2 = 16; }
   }
 
-  // 左手（非持武器手）
-  var lhx = bx + perpX * 4 + cos * armSwing2;
-  var lhy = by - 2 + perpY * 4;
-  // 右手（持武器）
-  var rhx = bx - perpX * 4 + cos * armSwing;
-  var rhy = by - 2 - perpY * 4;
+  var lhx = bx + perpX * 16 + cos * armSwing2;
+  var lhy = by - 8 + perpY * 16;
+  var rhx = bx - perpX * 16 + cos * armSwing;
+  var rhy = by - 8 - perpY * 16;
 
-  // 腿
   var legPhase = state === 'walk' ? Math.sin(frame * Math.PI) : 0;
-  var legSwing = legPhase * 3.5;
-  var lfx = bx + perpX * 3.5 + cos * legSwing * 0.4;
-  var lfy = by + 7 + Math.abs(legPhase) * 1.5;
-  var rfx = bx - perpX * 3.5 - cos * legSwing * 0.4;
-  var rfy = by + 7 - Math.abs(legPhase) * 1.5;
+  var legSwing = legPhase * 14;
+  var lfx = bx + perpX * 14 + cos * legSwing * 0.4;
+  var lfy = by + 28 + Math.abs(legPhase) * 6;
+  var rfx = bx - perpX * 14 - cos * legSwing * 0.4;
+  var rfy = by + 28 - Math.abs(legPhase) * 6;
 
-  // 武器
   var wx0 = rhx, wy0 = rhy;
-  var wx1 = rhx + cos * 10 - perpX * 1, wy1 = rhy + sin * 10 - perpY * 1;
+  var wx1 = rhx + cos * 40 - perpX * 4, wy1 = rhy + sin * 40 - perpY * 4;
 
   return { hx:hx, hy:hy, bx:bx, by:by, lhx:lhx, lhy:lhy, rhx:rhx, rhy:rhy,
            lfx:lfx, lfy:lfy, rfx:rfx, rfy:rfy, wx0:wx0, wy0:wy0, wx1:wx1, wy1:wy1,
            cos:cos, sin:sin, perpX:perpX, perpY:perpY, state:state, frame:frame };
 }
 
-// 渲染一帧
 function drawStickFrame(g, j, color) {
   var c = color || '#111';
-  var lw = 1.8;
-  var headR = 3.5;
-  // 头（稍大，清晰）
+  var lw = 6;
+  var headR = 13;
   g.fillStyle = c;
   g.beginPath(); g.arc(j.hx|0, j.hy|0, headR, 0, Math.PI*2); g.fill();
-  // 头内高光
   g.fillStyle = '#fff';
-  g.fillRect((j.hx-1.5)|0, (j.hy-1.5)|0, 1, 1);
-  // 身体
+  g.fillRect((j.hx-5)|0, (j.hy-5)|0, 4, 4);
   line(g, j.bx, j.by, j.hx, j.hy - headR, c, lw);
-  // 手臂
-  line(g, j.bx, j.by, j.lhx, j.lhy, c, lw + 0.3);
-  line(g, j.bx, j.by, j.rhx, j.rhy, c, lw + (j.state==='atk'?1.2:0.3));
-  // 腿
-  line(g, j.bx, j.by + 1, j.lfx, j.lfy, c, lw);
-  line(g, j.bx, j.by + 1, j.rfx, j.rfy, c, lw);
-  // 武器
+  line(g, j.bx, j.by, j.lhx, j.lhy, c, lw + 1);
+  line(g, j.bx, j.by, j.rhx, j.rhy, c, lw + (j.state==='atk'?4:1));
+  line(g, j.bx, j.by + 4, j.lfx, j.lfy, c, lw);
+  line(g, j.bx, j.by + 4, j.rfx, j.rfy, c, lw);
   if (j.wx1 !== undefined) {
-    line(g, j.wx0, j.wy0, j.wx1, j.wy1, '#444', 3);
-    // 刀尖高亮
+    line(g, j.wx0, j.wy0, j.wx1, j.wy1, '#444', 10);
     g.fillStyle = '#ddd';
-    g.fillRect((j.wx1-1)|0, (j.wy1-1)|0, 3, 3);
+    g.fillRect((j.wx1-4)|0, (j.wy1-4)|0, 10, 10);
   }
-  // 攻击弧线特效
   if (j.state === 'atk' && j.frame > 0.2) {
     drawAttackArc(g, j.bx, j.by, j.cos, j.sin, j.perpX, j.perpY, j.frame);
   }
@@ -777,11 +759,11 @@ function drawStickFrame(g, j, color) {
 
 // 史莱姆关节（简化：只有一个圆身体 + 眼睛）
 function getSlimeJoints(bounceT) {
-  var sq = Math.sin(bounceT) * 2;
+  var sq = Math.sin(bounceT) * 8;
   return {
-    hx:0, hy:-1-sq, bx:0, by:0,
-    lhx:-5, lhy:-2, rhx:5, rhy:-2,  // 眼睛位置
-    lfx:-3, lfy:3+sq, rfx:3, rfy:3+sq
+    hx:0, hy:-4-sq, bx:0, by:0,
+    lhx:-20, lhy:-8, rhx:20, rhy:-8,
+    lfx:-12, lfy:12+sq, rfx:12, rfy:12+sq
   };
 }
 
@@ -814,84 +796,74 @@ function drawStickChar(g, type, x, y, dir, state, frame, flashOn, extra) {
 
   } else if (type === 'slime') {
     var sj = getSlimeJoints(extra && extra.bounceT || 0);
-    // 身体
     var sc = flashOn ? '#fff' : (extra && extra.pal ? extra.pal.body : '#55cc44');
     var sd = flashOn ? '#ddd' : (extra && extra.pal ? extra.pal.dark : '#339922');
     g.fillStyle = sc;
-    g.fillRect(-6, -4 + (sj.lfy-3)*0.3, 12, 10);
+    g.fillRect(-24, -16 + (sj.lfy-3)*0.3, 48, 40);
     g.fillStyle = sd;
-    g.fillRect(-4, 1, 8, 3);
-    // 眼睛
+    g.fillRect(-16, 4, 32, 12);
     g.fillStyle = flashOn ? '#f00' : '#fff';
-    g.fillRect(sj.lhx, sj.lhy - 1, 3, 3);
-    g.fillRect(sj.rhx - 3, sj.rhy - 1, 3, 3);
+    g.fillRect(sj.lhx, sj.lhy - 4, 12, 12);
+    g.fillRect(sj.rhx - 12, sj.rhy - 4, 12, 12);
     g.fillStyle = flashOn ? '#f00' : '#222';
-    g.fillRect(sj.lhx + 1, sj.lhy, 1, 1);
-    g.fillRect(sj.rhx - 2, sj.rhy, 1, 1);
-    // 血条
+    g.fillRect(sj.lhx + 4, sj.lhy, 4, 4);
+    g.fillRect(sj.rhx - 8, sj.rhy, 4, 4);
     var hpR = extra && extra.hpRatio || 1;
-    g.fillStyle = '#333'; g.fillRect(-7, -12, 14, 2);
+    g.fillStyle = '#333'; g.fillRect(-28, -48, 56, 8);
     g.fillStyle = hpR > 0.5 ? '#4f4' : hpR > 0.25 ? '#fa0' : '#f33';
-    g.fillRect(-7, -12, Math.round(14 * hpR), 2);
+    g.fillRect(-28, -48, Math.round(56 * hpR), 8);
 
   } else if (type === 'skeleton') {
     var skJ = getKnightJoints(dir || 0, frame || 0, 'idle');
     drawStickFrame(g, skJ, flashOn ? '#fff' : '#ddd8c8');
-    // 肋骨横线
-    line(g, -3, -2, 3, -2, flashOn ? '#fff' : '#ccc8b8', 1);
-    line(g, -3, 0, 3, 0, flashOn ? '#fff' : '#ccc8b8', 1);
+    line(g, -12, -8, 12, -8, flashOn ? '#fff' : '#ccc8b8', 4);
+    line(g, -12, 0, 12, 0, flashOn ? '#fff' : '#ccc8b8', 4);
 
   } else if (type === 'bat') {
-    var bw2 = Math.sin((extra && extra.bounceT) || 0) * 3;
+    var bw2 = Math.sin((extra && extra.bounceT) || 0) * 12;
     g.fillStyle = flashOn ? '#fff' : '#443355';
-    g.fillRect(-2, -2, 4, 5);
-    // 翅膀
+    g.fillRect(-8, -8, 16, 20);
     g.fillStyle = flashOn ? '#fff' : '#554466';
-    g.fillRect(-6 + bw2, -3, 4, 2);
-    g.fillRect(2 - bw2, -3, 4, 2);
-    // 眼
-    g.fillStyle = '#f44'; g.fillRect(-1, -1, 2, 2);
+    g.fillRect(-24 + bw2, -12, 16, 8);
+    g.fillRect(8 - bw2, -12, 16, 8);
+    g.fillStyle = '#f44'; g.fillRect(-4, -4, 8, 8);
   }
   g.restore();
 }
 
 // 简笔画背景（替代纯色网格，后期可填入 tile 素材）
 function drawSketchBackground(g) {
-  // 地面基调
   g.fillStyle = '#f5f0e8'; g.fillRect(0, 0, GW, GH);
-  // 地平线（不规则手绘感）
   g.strokeStyle = '#c8c0b8';
   for (var pass = 0; pass < 3; pass++) {
-    g.lineWidth = pass === 0 ? 2 : 1;
+    g.lineWidth = pass === 0 ? 6 : 3;
     g.beginPath();
-    var baseY = 200 + pass * 22;
-    g.moveTo(0, baseY + Math.sin(0) * 4);
-    for (var xx = 0; xx < GW; xx += 15) {
-      g.lineTo(xx, baseY + Math.sin(xx * 0.03 + pass) * 4 + Math.sin(xx * 0.07) * 3);
+    var baseY = 800 + pass * 88;
+    g.moveTo(0, baseY + Math.sin(0) * 16);
+    for (var xx = 0; xx < GW; xx += 60) {
+      g.lineTo(xx, baseY + Math.sin(xx * 0.008 + pass) * 16 + Math.sin(xx * 0.018) * 12);
     }
     g.stroke();
   }
-  // 草地纹理短竖线
   g.strokeStyle = '#b8c8a8';
-  for (var gx = 10; gx < GW; gx += 18) {
-    var gh = 195 + Math.sin(gx * 0.5) * 6;
-    g.beginPath(); g.moveTo(gx, gh); g.lineTo(gx + 2, gh - 4 - Math.random() * 6); g.stroke();
+  g.lineWidth = 2;
+  for (var gx = 40; gx < GW; gx += 72) {
+    var gh = 780 + Math.sin(gx * 0.12) * 24;
+    g.beginPath(); g.moveTo(gx, gh); g.lineTo(gx + 6, gh - 16 - Math.random() * 24); g.stroke();
   }
-  // 远景简笔山
   g.strokeStyle = '#d0d0d8';
-  g.lineWidth = 1.5;
-  g.beginPath(); g.moveTo(0, 210);
-  for (var mx = 0; mx < GW; mx += 3) {
-    g.lineTo(mx, 205 + Math.sin(mx * 0.015) * 12 + Math.sin(mx * 0.04) * 6);
+  g.lineWidth = 5;
+  g.beginPath(); g.moveTo(0, 840);
+  for (var mx = 0; mx < GW; mx += 12) {
+    g.lineTo(mx, 820 + Math.sin(mx * 0.004) * 48 + Math.sin(mx * 0.01) * 24);
   }
   g.stroke();
-  // 近景石头/灌木（简笔圈）
-  g.strokeStyle = '#bbb';
-  var doodads = [[40,215],[120,208],[280,212],[380,218],[440,210]];
+  g.strokeStyle = '#bbb'; g.lineWidth = 3;
+  var doodads = [[160,860],[480,832],[1120,848],[1520,872],[1760,840]];
   for (var di = 0; di < doodads.length; di++) {
     var dd = doodads[di];
-    g.beginPath(); g.arc(dd[0], dd[1], 5 + (di % 3) * 3, 0, Math.PI * 2); g.stroke();
-    g.beginPath(); g.arc(dd[0] + 2, dd[1] - 2, 2, 0, Math.PI * 2); g.stroke();
+    g.beginPath(); g.arc(dd[0], dd[1], 20 + (di % 3) * 12, 0, Math.PI * 2); g.stroke();
+    g.beginPath(); g.arc(dd[0] + 8, dd[1] - 8, 8, 0, Math.PI * 2); g.stroke();
   }
 }
 
@@ -945,7 +917,7 @@ function drawGameWorld() {
   for (var ei = 0; ei < enemies.length; ei++) {
     var en = enemies[ei];
     if (en.hp <= 0) continue;
-    g.fillStyle = 'rgba(0,0,0,0.36)'; g.beginPath(); g.ellipse(en.x, en.y+8, 10, 4, 0, 0, Math.PI*2); g.fill();
+    g.fillStyle = 'rgba(0,0,0,0.36)'; g.beginPath(); g.ellipse(en.x, en.y+32, 40, 16, 0, 0, Math.PI*2); g.fill();
     drawCharacter(g, 'slime', en.x, en.y, 0, 'idle', Math.floor(en.bounceT), en.flashTimer > 0 && en.flashTimer % 0.06 < 0.03,
       { bounceT: en.bounceT, hpRatio: en.hp / en.maxHp,
         pal: { body: ['#55cc44','#44aacc','#cc7744'][en.colorVar % 3],
@@ -953,7 +925,7 @@ function drawGameWorld() {
   }
 
   // 玩家（骑士）
-  g.fillStyle = 'rgba(0,0,0,0.48)'; g.beginPath(); g.ellipse(player.x, player.y+10, 12, 5, 0, 0, Math.PI*2); g.fill();
+  g.fillStyle = 'rgba(0,0,0,0.48)'; g.beginPath(); g.ellipse(player.x, player.y+40, 48, 20, 0, 0, Math.PI*2); g.fill();
   var knightState = player.attackAnim > 0 ? 'atk' : (player.walkFrame > 0 ? 'walk' : 'idle');
   var knightFrame = player.attackAnim > 0 ? (0.25 - player.attackAnim) / 0.25 : player.walkFrame;
   drawCharacter(g, 'knight', player.x, player.y,
